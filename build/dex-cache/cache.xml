@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<pre-dex-items>
+
+    <item
+        dex="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\build\pre-dexed\debug\d2xx-7c59def46193839b2ddd4fb3e5a56198a1fd8209.jar"
+        jar="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\libs\d2xx.jar"
+        jumboMode="false"
+        revision="19.0.3"
+        sha1="549d88cce99830dc2ae951a13d5a8b897362351b"/>
+    <item
+        dex="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\build\pre-dexed\debug\support-v4-19.1.0-e311e493b238b75da4095bd5ee7b69d76d73dc42.jar"
+        jar="C:\Program Files (x86)\Android\android-studio\sdk\extras\android\m2repository\com\android\support\support-v4\19.1.0\support-v4-19.1.0.jar"
+        jumboMode="false"
+        revision="19.0.3"
+        sha1="85f201b380937e61a9dce6ca90ccf6872abbfb67"/>
+    <item
+        dex="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\build\pre-dexed\debug\Vuforia-5d559dc9ac152fe8be7788ca0e1abe3599b3035c.jar"
+        jar="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\libs\Vuforia.jar"
+        jumboMode="false"
+        revision="19.0.3"
+        sha1="f6b6945becf3ddc4b9f97d4432359d35e63e4f6e"/>
+    <item
+        dex="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\build\pre-dexed\debug\classes-50c46b1cac6bdd7e3a56e21def844894c555cda2.jar"
+        jar="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\build\exploded-aar\com.android.support\appcompat-v7\19.1.0\classes.jar"
+        jumboMode="false"
+        revision="19.0.3"
+        sha1="3499ceba05ca1f6037c6a2fad73df8f636224a28"/>
+    <item
+        dex="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\build\pre-dexed\debug\armeabi-6ca8a9cec135dcd9bc677eb918df2291fa5d1fe8.jar"
+        jar="C:\Users\Cash\Documents\workspace\MultiWiiCam2GPS\app\libs\armeabi.jar"
+        jumboMode="false"
+        revision="19.0.3"
+        sha1="ffde167869ed6bac8dbef41d9b733e13273b05d8"/>
+
+</pre-dex-items>

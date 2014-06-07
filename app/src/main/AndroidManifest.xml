@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.cashlo.multiwiicam2gps.app" >
+
+    <uses-feature android:name="android.hardware.usb.host" />
+
+    <!--
+        Add this permission to get access to the camera.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!--
+        Add this permission to allow opening network sockets.
+    -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!--
+        Add this permission to check which network access properties (e.g.
+        active type: 3G/WiFi).
+     -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name" >
+        <activity
+            android:name=".GPSStatusActivity"
+            android:label="@string/app_name" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
