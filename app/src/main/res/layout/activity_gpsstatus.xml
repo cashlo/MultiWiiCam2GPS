@@ -20,4 +20,9 @@
         android:onClick="onStopClick"
         android:text="Stop Location" />
 
+    <TextView
+        android:id="@+id/GPS_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
 </LinearLayout>

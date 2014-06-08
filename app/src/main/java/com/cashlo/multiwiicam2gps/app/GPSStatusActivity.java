@@ -11,6 +11,7 @@ import android.util.Log;
 import android.view.GestureDetector;
 import android.view.View;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import com.qualcomm.vuforia.CameraDevice;
 import com.qualcomm.vuforia.DataSet;
@@ -25,8 +26,6 @@ import com.qualcomm.vuforia.Tracker;
 import com.qualcomm.vuforia.TrackerManager;
 
 import java.util.ArrayList;
-import java.util.Timer;
-import java.util.TimerTask;
 
 import utils.MSP;
 import utils.SampleApplicationControl;
@@ -69,6 +68,7 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
             }
         }
     };
+    private int writeCounter = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,10 +130,10 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
     }
 
     public synchronized void getCameraLocation() {
-        if (waitingLocation) {
-            Log.e(LOGTAG, "Waiting for location");
-            return;
-        }
+        //if (waitingLocation) {
+        //    Log.e(LOGTAG, "Waiting for location");
+        //    return;
+        //}
 
         mRenderer = Renderer.getInstance();
 
@@ -178,6 +178,11 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
             Log.v(LOGTAG, "Latitude: " + lat + " Longitude: " + lon + " Altitude: " + altitude);
 
             mMSP.writeGPS(lat, lon, altitude);
+            writeCounter++;
+            if (writeCounter > 10) {
+                mMSP.readGPS();
+                writeCounter = 0;
+            }
         }
         mRenderer.end();
     }
@@ -368,21 +373,27 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
 
     @Override
     public void onSuccess() {
-        if (!stopCamera) {
-            getCameraLocation();
-        }
+        //if (!stopCamera) {
+        //   getCameraLocation();
+        //}
     }
 
     @Override
     public void onFailure() {
-        if (!stopCamera) {
-            new Timer().schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    getCameraLocation();
-                }
-            }, 500);
-        }
+        //if (!stopCamera) {
+        //     new Timer().schedule(new TimerTask() {
+        //         @Override
+        //        public void run() {
+        //            getCameraLocation();
+        //        }
+        //    }, 500);
+        // }
+    }
+
+    @Override
+    public void onGPSRead(int latitude, int longitude, int altitude) {
+        TextView GPSStatus = (TextView) findViewById(R.id.GPS_status);
+        GPSStatus.setText("latitude: " + latitude + " longitude: " + longitude + " altitude: " + altitude);
     }
 
     public void onStartClick(View view) {

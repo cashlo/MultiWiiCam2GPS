@@ -1,5 +1,6 @@
 package utils;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
 import android.util.Log;
@@ -223,6 +224,18 @@ public synchronized void writeGPS(int latitude, int longitude, int altitude){
     serialize16(payload, 0);
 
     MSP.sendRequestMSP(MSP.requestMSP(MSP.MSP_SET_RAW_GPS, payload.toArray(new Character[payload.size()])), ftDev);
+    }
+
+    public synchronized void readGPS() {
+        openDevice();
+        if (ftDev == null || ftDev.isOpen() == false) {
+            Log.e(LOGTAG, "Device is not open");
+            // mListener.onFailure();
+            return;
+        }
+
+        ftDev.setLatencyTimer((byte) 16);
+        MSP.sendRequestMSP(MSP.requestMSP(MSP.MSP_RAW_GPS, null), ftDev);
     }
 
     private void serialize16(List<Character> payload, int a) {
@@ -460,6 +473,11 @@ public synchronized void writeGPS(int latitude, int longitude, int altitude){
                 GPS_longitude = read32();
                 GPS_altitude = read16();
                 GPS_speed = read16();
+                ((Activity) mContext).runOnUiThread(new Runnable() {
+                    public void run() {
+                        mListener.onGPSRead(GPS_latitude, GPS_longitude, GPS_altitude);
+                    }
+                });
                 break;
             case MSP_COMP_GPS:
                 GPS_distanceToHome = read16();
@@ -472,9 +490,11 @@ public synchronized void writeGPS(int latitude, int longitude, int altitude){
     }
 
     public interface OnGPSWriteListener {
-        abstract public void onSuccess();
+        void onSuccess();
 
-        abstract public void onFailure();
+        void onFailure();
+
+        void onGPSRead(int latitude, int longitude, int altitude);
     }
 
   /*
