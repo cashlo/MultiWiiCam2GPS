@@ -17,49 +17,6 @@ import java.util.List;
  */
 public class MSP {
 
-    private final String LOGTAG = "MSP";
-
-
-    private static D2xxManager ftD2xx = null;
-    private FT_Device ftDev;
-
-    static final int READBUF_SIZE  = 256;
-    static final int BAUDRATE = 115200;
-    byte[] rbuf  = new byte[READBUF_SIZE];
-    char[] rchar = new char[READBUF_SIZE];
-    int mReadSize=0;
-
-    boolean mThreadIsStopped = true;
-    Handler mHandler = new Handler();
-    Thread mThread;
-
-    Context mContext;
-
-    private boolean mGPSWriting = false;
-
-    public MSP(Context context){
-        mContext = context;
-        try {
-            ftD2xx = D2xxManager.getInstance(context);
-        } catch (D2xxManager.D2xxException ex) {
-            Log.e(LOGTAG,ex.toString());
-        }
-    }
-
-
-    int byteRC_RATE, byteRC_EXPO, byteRollPitchRate, byteYawRate,
-            byteDynThrPID, byteThrottle_EXPO, byteThrottle_MID, byteSelectSetting,
-            cycleTime, i2cError,
-            version, versionMisMatch, horizonInstrSize,
-            GPS_distanceToHome, GPS_directionToHome,
-            GPS_numSat, GPS_fix, GPS_update, GPS_altitude, GPS_speed,
-            GPS_latitude, GPS_longitude,
-            init_com, graph_on, pMeterSum, intPowerTrigger, bytevbat;
-
-    private int present = 0;
-
-    private static final String MSP_HEADER = "$M<";
-
     public static final int
             MSP_IDENT = 100,
             MSP_STATUS = 101,
@@ -103,7 +60,6 @@ public class MSP {
 
     MSP_DEBUGMSG = 253,
             MSP_DEBUG = 254;
-
     public static final int
             IDLE = 0,
             HEADER_START = 1,
@@ -112,33 +68,83 @@ public class MSP {
             HEADER_SIZE = 4,
             HEADER_CMD = 5,
             HEADER_ERR = 6;
-
     int c_state = IDLE;
+    static final int READBUF_SIZE  = 256;
+    byte[] rbuf = new byte[READBUF_SIZE];
+    char[] rchar = new char[READBUF_SIZE];
+    static final int BAUDRATE = 115200;
+    private static final String MSP_HEADER = "$M<";
+    private static D2xxManager ftD2xx = null;
+    private final String LOGTAG = "MSP";
+    int mReadSize=0;
+    boolean mThreadIsStopped = true;
+    Handler mHandler = new Handler();
+    Thread mThread;
+    Context mContext;
+    OnGPSWriteListener mListener;
+    int byteRC_RATE, byteRC_EXPO, byteRollPitchRate, byteYawRate,
+            byteDynThrPID, byteThrottle_EXPO, byteThrottle_MID, byteSelectSetting,
+            cycleTime, i2cError,
+            version, versionMisMatch, horizonInstrSize,
+            GPS_distanceToHome, GPS_directionToHome,
+            GPS_numSat, GPS_fix, GPS_update, GPS_altitude, GPS_speed,
+            GPS_latitude, GPS_longitude,
+            init_com, graph_on, pMeterSum, intPowerTrigger, bytevbat;
     boolean err_rcvd = false;
-
     byte checksum = 0;
     byte cmd;
     int offset = 0, dataSize = 0;
     byte[] inBuf = new byte[256];
     int p;
-
-
-
-    public int read32() {
-        return (inBuf[p++] & 0xff) + ((inBuf[p++] & 0xff) << 8) + ((inBuf[p++] & 0xff) << 16) + ((inBuf[p++] & 0xff) << 24);
-    }
-
-    public int read16() {
-        return (inBuf[p++] & 0xff) + ((inBuf[p++]) << 8);
-    }
-
-    public int read8() {
-        return inBuf[p++] & 0xff;
-    }
-
     int mode;
     boolean toggleRead = false, toggleReset = false, toggleCalibAcc = false, toggleCalibMag = false, toggleWrite = false,
             toggleRXbind = false, toggleSetSetting = false, toggleVbat = true, toggleMotor = false, motorcheck = true;
+    int multiType, multiCapability = 0;
+    private FT_Device ftDev;
+    private Runnable mLoop = new Runnable() {
+        @Override
+        public void run() {
+            int i;
+            int readSize;
+            mThreadIsStopped = false;
+            while (true) {
+                if (mThreadIsStopped) {
+                    break;
+                }
+
+/*                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                }
+*/
+                synchronized (ftDev) {
+                    readSize = ftDev.getQueueStatus();
+                    if (readSize > 0) {
+                        mReadSize = readSize;
+                        if (mReadSize > READBUF_SIZE) {
+                            mReadSize = READBUF_SIZE;
+                        }
+                        ftDev.read(rbuf, mReadSize);
+
+                        decodeResponse(rbuf);
+
+                    } // end of if(readSize>0)
+                } // end of synchronized
+            }
+        }
+    };
+    private boolean mGPSWriting = false;
+    private int present = 0;
+
+    public MSP(Context context, OnGPSWriteListener listener) {
+        mContext = context;
+        mListener = listener;
+        try {
+            ftD2xx = D2xxManager.getInstance(context);
+        } catch (D2xxManager.D2xxException ex) {
+            Log.e(LOGTAG, ex.toString());
+        }
+    }
 
     public static List<Byte> requestMSP(int msp, Character[] payload) {
         if (msp < 0) {
@@ -168,87 +174,74 @@ public class MSP {
         return (bf);
     }
 
-    public void writeGPS(int latitude, int longitude, int altitude){
-
-        if(mGPSWriting){
-            Log.e(LOGTAG, "GPS already writing");
-            return;
+    public static void sendRequestMSP(List<Byte> msp, FT_Device device) {
+        byte[] arr = new byte[msp.size()];
+        int i = 0;
+        for (byte b : msp) {
+            arr[i++] = b;
         }
+        device.write(arr); // send the complete byte sequence in one go
+    }
 
-        mGPSWriting = true;
-        openDevice();
-        if(ftDev == null || ftDev.isOpen() == false) {
-            Log.e(LOGTAG, "Device is not open");
-            mGPSWriting = false;
-            return;
-        }
-
-        ftDev.setLatencyTimer((byte)16);
-        List<Character> payload = new ArrayList<Character>();
-
-        payload.add(MSP.parseChar(1)); //GPS_FIX
-        payload.add(MSP.parseChar(8)); //GPS_numSat
-        serialize32(payload, latitude);
-        serialize32(payload, longitude);
-        serialize16(payload, altitude);
-        serialize16(payload, 0);
-        serialize16(payload, 0);
-
-        MSP.sendRequestMSP(MSP.requestMSP(MSP.MSP_SET_RAW_GPS, payload.toArray(new Character[payload.size()])), ftDev);
-
-
+    static final public char parseChar(byte what) {
+        return (char) (what & 0xff);
     };
+
+    static final public char parseChar(int what) {
+        return (char) what;
+    }
+
+    public int read32() {
+        return (inBuf[p++] & 0xff) + ((inBuf[p++] & 0xff) << 8) + ((inBuf[p++] & 0xff) << 16) + ((inBuf[p++] & 0xff) << 24);
+    }
+
+    public int read16() {
+        return (inBuf[p++] & 0xff) + ((inBuf[p++]) << 8);
+    }
+
+    public int read8() {
+        return inBuf[p++] & 0xff;
+    }
+
+public synchronized void writeGPS(int latitude, int longitude, int altitude){
+    openDevice();
+    if (ftDev == null || ftDev.isOpen() == false) {
+        Log.e(LOGTAG, "Device is not open");
+        // mListener.onFailure();
+        return;
+        }
+
+    ftDev.setLatencyTimer((byte) 16);
+    List<Character> payload = new ArrayList<Character>();
+
+    payload.add(MSP.parseChar(1)); //GPS_FIX
+    payload.add(MSP.parseChar(8)); //GPS_numSat
+    serialize32(payload, latitude);
+    serialize32(payload, longitude);
+    serialize16(payload, altitude);
+    serialize16(payload, 0);
+    serialize16(payload, 0);
+
+    MSP.sendRequestMSP(MSP.requestMSP(MSP.MSP_SET_RAW_GPS, payload.toArray(new Character[payload.size()])), ftDev);
+    }
 
     private void serialize16(List<Character> payload, int a) {
-        payload.add(parseChar((a   ) & 0xFF));
-        payload.add(parseChar((a>>8) & 0xFF));
+        payload.add(parseChar((a) & 0xFF));
+        payload.add(parseChar((a >> 8) & 0xFF));
     }
+
     private void serialize32(List<Character> payload, int a) {
-        payload.add(parseChar((a    ) & 0xFF));
-        payload.add(parseChar((a>> 8) & 0xFF));
-        payload.add(parseChar((a>>16) & 0xFF));
-        payload.add(parseChar((a>>24) & 0xFF));
+        payload.add(parseChar((a) & 0xFF));
+        payload.add(parseChar((a >> 8) & 0xFF));
+        payload.add(parseChar((a >> 16) & 0xFF));
+        payload.add(parseChar((a >> 24) & 0xFF));
     }
-
-    private Runnable mLoop = new Runnable() {
-        @Override
-        public void run() {
-            int i;
-            int readSize;
-            mThreadIsStopped = false;
-            while(true) {
-                if(mThreadIsStopped) {
-                    break;
-                }
-
-/*                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                }
-*/
-                synchronized (ftDev) {
-                    readSize = ftDev.getQueueStatus();
-                    if(readSize>0) {
-                        mReadSize = readSize;
-                        if(mReadSize > READBUF_SIZE) {
-                            mReadSize = READBUF_SIZE;
-                        }
-                        ftDev.read(rbuf,mReadSize);
-
-                        decodeResponse(rbuf);
-
-                    } // end of if(readSize>0)
-                } // end of synchronized
-            }
-        }
-    };
-
 
     private void openDevice() {
-        if(ftDev != null) {
-            if(ftDev.isOpen()) {
-                if(mThreadIsStopped) {
-                    SetConfig(BAUDRATE, (byte)8, (byte)1, (byte)0, (byte)0);
+        if (ftDev != null) {
+            if (ftDev.isOpen()) {
+                if (mThreadIsStopped) {
+                    SetConfig(BAUDRATE, (byte) 8, (byte) 1, (byte) 0, (byte) 0);
                     ftDev.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
                     ftDev.restartInTask();
                     new Thread(mLoop).start();
@@ -260,16 +253,16 @@ public class MSP {
         int devCount = 0;
         devCount = ftD2xx.createDeviceInfoList(mContext);
 
-        Log.d(LOGTAG, "Device number : "+ Integer.toString(devCount));
+        Log.d(LOGTAG, "Device number : " + Integer.toString(devCount));
 
         D2xxManager.FtDeviceInfoListNode[] deviceList = new D2xxManager.FtDeviceInfoListNode[devCount];
         ftD2xx.getDeviceInfoList(devCount, deviceList);
 
-        if(devCount <= 0) {
+        if (devCount <= 0) {
             return;
         }
 
-        if(ftDev == null) {
+        if (ftDev == null) {
             ftDev = ftD2xx.openByIndex(mContext, 0);
         } else {
             synchronized (ftDev) {
@@ -277,9 +270,9 @@ public class MSP {
             }
         }
 
-        if(ftDev.isOpen()) {
-            if(mThreadIsStopped) {
-                SetConfig(115200, (byte)8, (byte)1, (byte)0, (byte)0);
+        if (ftDev.isOpen()) {
+            if (mThreadIsStopped) {
+                SetConfig(115200, (byte) 8, (byte) 1, (byte) 0, (byte) 0);
                 ftDev.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
                 ftDev.restartInTask();
                 new Thread(mLoop).start();
@@ -370,16 +363,6 @@ public class MSP {
         ftDev.setFlowControl(flowCtrlSetting, (byte) 0x0b, (byte) 0x0d);
     }
 
-    public static void sendRequestMSP(List<Byte> msp, FT_Device device) {
-        byte[] arr = new byte[msp.size()];
-        int i = 0;
-        for (byte b : msp) {
-            arr[i++] = b;
-        }
-        device.write(arr); // send the complete byte sequence in one go
-    }
-
-
     public void decodeResponse(byte[] readByte) {
         for (byte b : readByte) {
             int c = b;
@@ -440,7 +423,14 @@ public class MSP {
 
     }
 
-    int multiType, multiCapability = 0;
+
+    // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+  /*
+  static final public char parseChar(boolean what) {  // 0/1 or T/F ?
+    return what ? 't' : 'f';
+  }
+  */
 
     public void evaluateCommand(byte cmd, int dataSize) {
         int i;
@@ -460,7 +450,7 @@ public class MSP {
                 mode = read32();
                 break;
             case MSP_SET_RAW_GPS:
-                mGPSWriting = false;
+                //mListener.onSuccess();
                 Log.v(LOGTAG, "GPS set successful!");
                 break;
             case MSP_RAW_GPS:
@@ -481,21 +471,10 @@ public class MSP {
         }
     }
 
+    public interface OnGPSWriteListener {
+        abstract public void onSuccess();
 
-    // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
-
-  /*
-  static final public char parseChar(boolean what) {  // 0/1 or T/F ?
-    return what ? 't' : 'f';
-  }
-  */
-
-    static final public char parseChar(byte what) {
-        return (char) (what & 0xff);
-    }
-
-    static final public char parseChar(int what) {
-        return (char) what;
+        abstract public void onFailure();
     }
 
   /*

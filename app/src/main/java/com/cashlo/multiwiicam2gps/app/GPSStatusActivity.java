@@ -1,7 +1,11 @@
 package com.cashlo.multiwiicam2gps.app;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.ActivityInfo;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.GestureDetector;
@@ -21,6 +25,8 @@ import com.qualcomm.vuforia.Tracker;
 import com.qualcomm.vuforia.TrackerManager;
 
 import java.util.ArrayList;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import utils.MSP;
 import utils.SampleApplicationControl;
@@ -29,45 +35,60 @@ import utils.SampleApplicationSession;
 import utils.SampleMath;
 
 
-public class GPSStatusActivity extends Activity implements SampleApplicationControl {
+public class GPSStatusActivity extends Activity implements SampleApplicationControl, LocationListener, MSP.OnGPSWriteListener {
 
     private static final String LOGTAG = "GPSStatus";
-    private Renderer mRenderer;
-
     SampleApplicationSession vuforiaAppSession;
-
+    private Renderer mRenderer;
     private DataSet mCurrentDataset;
     private int mCurrentDatasetSelectionIndex = 0;
     private int mStartDatasetsIndex = 0;
     private int mDatasetsNumber = 0;
     private ArrayList<String> mDatasetStrings = new ArrayList<String>();
-
     private GestureDetector mGestureDetector;
-
     private boolean mSwitchDatasetAsap = false;
     private boolean mFlash = false;
     private boolean mContAutofocus = false;
     private boolean mExtendedTracking = false;
-
     private View mFlashOptionView;
-
     private RelativeLayout mUILayout;
+    private int latitudeHome;
+    private int longitudeHome;
+    private int altitudeHome;
 
-    boolean mIsDroidDevice = false;
-
-    private final int latitudeHome = 523823900;
-    private final int longitudeHome = 46429100;
-    private final int altitudeHome    = 15;
+    private boolean waitingLocation = false;
 
     private MSP mMSP;
-
+    private LocationManager locationManager;
+    private boolean stopCamera = false;
+    private Runnable cameraLoop = new Runnable() {
+        @Override
+        public void run() {
+            while (!stopCamera) {
+                getCameraLocation();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_gpsstatus);
 
-        mMSP = new MSP(this);
+        mMSP = new MSP(this, this);
+
+        locationManager = (LocationManager)
+                getSystemService(Context.LOCATION_SERVICE);
+
+        Location location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        if (location != null) {
+            latitudeHome = (int) (location.getLatitude() * 10000000);
+            longitudeHome = (int) (location.getLongitude() * 10000000);
+            altitudeHome = (int) location.getAltitude();
+        } else {
+            waitingLocation = true;
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
+        }
 
         vuforiaAppSession = new SampleApplicationSession(this);
         mDatasetStrings.add("StonesAndChips.xml");
@@ -77,9 +98,45 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
                 .initAR(this, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
     }
 
-    public void onLocationClick(View view) {
+    public void onLocationChanged(Location location) {
+        if (location != null) {
+            latitudeHome = (int) (location.getLatitude() * 10000000);
+            longitudeHome = (int) (location.getLongitude() * 10000000);
+            altitudeHome = (int) location.getAltitude();
+            waitingLocation = false;
+            Log.v("Location Changed", location.getLatitude() + " and " + location.getLongitude());
+            getCameraLocation();
+            locationManager.removeUpdates(this);
+        }
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
+    }
+
+    public void onStopClick(View view) {
+        stopCamera = true;
+    }
+
+    public synchronized void getCameraLocation() {
+        if (waitingLocation) {
+            Log.e(LOGTAG, "Waiting for location");
+            return;
+        }
 
         mRenderer = Renderer.getInstance();
+
 
         State state = mRenderer.begin();
 
@@ -112,9 +169,9 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
             float cam_dir_y = camPose[9];
             float cam_dir_z = camPose[10];
 
-            int lat = latitudeAddMM(latitudeHome, (int)y);
-            int lon = longitudeAddMM(latitudeHome, longitudeHome, (int)x);
-            int altitude = altitudeHome + (int)(z/1000);
+            int lat = latitudeAddMM(latitudeHome, (int) y);
+            int lon = longitudeAddMM(latitudeHome, longitudeHome, (int) x);
+            int altitude = altitudeHome + (int) (z / 1000);
 
 
             Log.v("Location", "x:" + x + " y:" + y + " z:" + z);
@@ -136,14 +193,12 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
 
         // Trying to initialize the image tracker
         tracker = tManager.initTracker(ImageTracker.getClassType());
-        if (tracker == null)
-        {
+        if (tracker == null) {
             Log.e(
                     LOGTAG,
                     "Tracker not initialized. Tracker already initialized or the camera is already started");
             result = false;
-        } else
-        {
+        } else {
             Log.i(LOGTAG, "Tracker successfully initialized");
         }
         return result;
@@ -172,11 +227,9 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
             return false;
 
         int numTrackables = mCurrentDataset.getNumTrackables();
-        for (int count = 0; count < numTrackables; count++)
-        {
+        for (int count = 0; count < numTrackables; count++) {
             Trackable trackable = mCurrentDataset.getTrackable(count);
-            if(isExtendedTrackingActive())
-            {
+            if (isExtendedTrackingActive()) {
                 trackable.startExtendedTracking();
             }
 
@@ -226,14 +279,11 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
         if (imageTracker == null)
             return false;
 
-        if (mCurrentDataset != null && mCurrentDataset.isActive())
-        {
+        if (mCurrentDataset != null && mCurrentDataset.isActive()) {
             if (imageTracker.getActiveDataSet().equals(mCurrentDataset)
-                    && !imageTracker.deactivateDataSet(mCurrentDataset))
-            {
+                    && !imageTracker.deactivateDataSet(mCurrentDataset)) {
                 result = false;
-            } else if (!imageTracker.destroyDataSet(mCurrentDataset))
-            {
+            } else if (!imageTracker.destroyDataSet(mCurrentDataset)) {
                 result = false;
             }
 
@@ -257,16 +307,14 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
     @Override
     public void onInitARDone(SampleApplicationException exception) {
 
-        if (exception != null){
+        if (exception != null) {
             Log.e(LOGTAG, exception.getString());
             finish();
         }
 
-        try
-        {
+        try {
             vuforiaAppSession.startAR(CameraDevice.CAMERA.CAMERA_DEFAULT);
-        } catch (SampleApplicationException e)
-        {
+        } catch (SampleApplicationException e) {
             Log.e(LOGTAG, e.getString());
         }
 
@@ -277,20 +325,17 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
             mContAutofocus = true;
         else
             Log.e(LOGTAG, "Unable to enable continuous autofocus");
-
     }
 
     @Override
     public void onQCARUpdate(State state) {
-        if (mSwitchDatasetAsap)
-        {
+        if (mSwitchDatasetAsap) {
             mSwitchDatasetAsap = false;
             TrackerManager tm = TrackerManager.getInstance();
             ImageTracker it = (ImageTracker) tm.getTracker(ImageTracker
                     .getClassType());
             if (it == null || mCurrentDataset == null
-                    || it.getActiveDataSet() == null)
-            {
+                    || it.getActiveDataSet() == null) {
                 Log.d(LOGTAG, "Failed to swap datasets");
                 return;
             }
@@ -300,16 +345,16 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
         }
     }
 
-    public int latitudeAddMM (int latitudeStart, int distanceMM){
+    public int latitudeAddMM(int latitudeStart, int distanceMM) {
         int latitudeDifference = distanceMM * 10000000 / 11111111;
 
         Log.v(LOGTAG, "latitudeDifference: " + latitudeDifference);
 
-        return latitudeStart + latitudeDifference ;
+        return latitudeStart + latitudeDifference;
     }
 
-    public int longitudeAddMM (int latitudeStart, int longitudeStart,  int distanceMM){
-        int MM2degree =(int)( ((double)11111111) * Math.cos(Math.toRadians(latitudeStart / 10000000)));
+    public int longitudeAddMM(int latitudeStart, int longitudeStart, int distanceMM) {
+        int MM2degree = (int) (((double) 11111111) * Math.cos(Math.toRadians(latitudeStart / 10000000)));
 
         int longitudeDifference = distanceMM * 10000000 / MM2degree;
         Log.v(LOGTAG, "longitudeDifference: " + longitudeDifference);
@@ -317,8 +362,31 @@ public class GPSStatusActivity extends Activity implements SampleApplicationCont
         return longitudeStart + distanceMM * 10000000 / MM2degree;
     }
 
-    boolean isExtendedTrackingActive()
-    {
+    boolean isExtendedTrackingActive() {
         return mExtendedTracking;
+    }
+
+    @Override
+    public void onSuccess() {
+        if (!stopCamera) {
+            getCameraLocation();
+        }
+    }
+
+    @Override
+    public void onFailure() {
+        if (!stopCamera) {
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    getCameraLocation();
+                }
+            }, 500);
+        }
+    }
+
+    public void onStartClick(View view) {
+        stopCamera = false;
+        new Thread(cameraLoop).start();
     }
 }

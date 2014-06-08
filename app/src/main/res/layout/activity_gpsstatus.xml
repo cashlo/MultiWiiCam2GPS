@@ -1,14 +1,23 @@
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     tools:context="${relativePackage}.${activityClass}">
+
+
+    <Button
+        android:id="@+id/start_location_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:onClick="onStartClick"
+        android:text="Start Location" />
 
     <Button
         android:id="@+id/location_button"
-        android:onClick="onLocationClick"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Get Location"/>
+        android:onClick="onStopClick"
+        android:text="Stop Location" />
 
-</RelativeLayout>
+</LinearLayout>

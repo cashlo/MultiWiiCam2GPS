@@ -4,6 +4,8 @@
 
     <uses-feature android:name="android.hardware.usb.host" />
 
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
     <!--
         Add this permission to get access to the camera.
     -->
